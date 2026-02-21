@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>ANDROID X MediaFire</title>
+
+<style>
+/* === Paleta hacker multicapa (no tocar) === */
+body{
+    margin:0;
+    background:#000;
+    font-family:Consolas, monospace;
+    color:#00ff88;
+    overflow:hidden;
+}
+
+/* Fondo animado multicapa */
+body::before{
+    content:"";
+    position:fixed;
+    width:200%;
+    height:200%;
+    background:
+        radial-gradient(circle at 25% 25%, #0088ff 0%, transparent 25%),
+        radial-gradient(circle at 75% 75%, #00ff88 0%, transparent 25%),
+        radial-gradient(circle at 50% 50%, #ff00ff 0%, transparent 30%);
+    animation:pulse 12s infinite linear;
+    opacity:0.05;
+    pointer-events:none;
+}
+@keyframes pulse{
+    0%{transform:translate(-25%,-25%) rotate(0deg);}
+    100%{transform:translate(-25%,-25%) rotate(360deg);}
+}
+
+/* Scanlines */
+body::after{
+    content:"";
+    position:fixed;
+    width:100%;
+    height:100%;
+    background:repeating-linear-gradient(
+        0deg,
+        rgba(0,255,255,0.03),
+        rgba(0,255,255,0.03) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    pointer-events:none;
+}
+
+/* Título y controles */
+#menu, #consoleContainer{
+    position:absolute;
+    width:100%;
+    height:100%;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    box-sizing:border-box;
+}
+h1{
+    font-size:55px;
+    letter-spacing:5px;
+    background:linear-gradient(90deg,#00ffff,#0088ff,#ff00ff,#00ff88);
+    -webkit-background-clip:text;
+    color:transparent;
+    animation:glowTitle 2s infinite alternate;
+    margin:0 0 20px 0;
+}
+@keyframes glowTitle{
+    from{filter:drop-shadow(0 0 10px #0088ff);}
+    to{filter:drop-shadow(0 0 25px #00ffff);}
+}
+select,button{
+    background:black;
+    color:#00ffff;
+    border:2px solid #00ffff;
+    padding:10px 25px;
+    margin:10px;
+    cursor:pointer;
+    box-shadow:0 0 10px #00ffff inset, 0 0 10px #0088ff;
+    transition:0.25s;
+}
+button:hover{
+    color:#ff00ff;
+    border-color:#ff00ff;
+    box-shadow:0 0 20px #ff00ff inset, 0 0 20px #ff00ff;
+}
+
+/* Consola y scan */
+#consoleContainer{ display:none; padding:20px; }
+#console{
+    width:100%;
+    height:60%;
+    border:1px solid #00ffff;
+    padding:18px;
+    overflow-y:auto;
+    box-shadow:
+        0 0 25px #00ffff inset,
+        0 0 15px #0088ff;
+    color:#00ff88;
+    line-height:1.4;
+    font-size:15px;
+}
+.scan{
+    width:100%;
+    height:25%;
+    overflow-y:auto;
+    border-top:1px solid #0088ff;
+    margin-top:10px;
+    padding-top:10px;
+    color:#00ffff;
+    font-size:15px;
+}
+
+/* estéticas para diferentes trozos de texto */
+#console span.cmd { color:#00ffff; }
+#console span.hex { color:#ff00ff; }
+#console span.ok { color:#00ff88; }
+#console span.warn { color:#ffaa00; }
+#console span.err { color:#ff4444; text-shadow:0 0 10px rgba(255,68,68,0.7); }
+
+/* Virus detectado y link */
+.status{
+    margin-top:8px;
+    color:#00ccff;
+    text-shadow:0 0 10px #00ccff;
+}
+.link{
+    margin-top:10px;
+    color:#0088ff;
+    display:none;
+    text-decoration:none;
+    font-weight:bold;
+    text-shadow:0 0 15px #0088ff;
+}
+.link:hover{
+    color:#00ffff;
+    text-shadow:0 0 25px #00ffff;
+}
+
+/* ASCII azul */
+.ascii{
+    color:#0088ff;
+    white-space:pre;
+    text-shadow:
+        0 0 10px #0088ff,
+        0 0 20px #00ffff,
+        0 0 30px #0088ff;
+    font-size:12px;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+    <h1>Selecciona</h1>
+    <select id="gameSelect">
+        <option>CupHead + DLC</option>
+    </select>
+    <button id="startBtn">Convertir</button>
+</div>
+
+<div id="consoleContainer">
+    <div id="console"></div>
+    <div class="scan" id="scan"></div>
+    <div class="status">Virus detectado: 0</div>
+    <a id="download" class="link" href="#" target="_blank" rel="noopener noreferrer">Link: MediaFire Descargar</a>
+</div>
+
+<script>
+/* === URLs solicitadas === */
+const MEDIAFIRE_URL = "https://www.mediafire.com/file/zysn5h3x73c5jit/Cuphead+OST+MP3.zip/file";
+const STEAM_URL     = "https://store.steampowered.com/app/268910/Cuphead/";
+
+/* ASCII y líneas intro */
+const asciiArt = `
+   ▄▄▄▄███▄▄▄▄      ▄████████ ████████▄   ▄█     ▄████████    ▄████████  ▄█     ▄████████    ▄████████ 
+ ▄██▀▀▀███▀▀▀██▄   ███    ███ ███   ▀███ ███    ███    ███   ███    ███ ███    ███    ███   ███    ███ 
+ ███   ███   ███   ███    █▀  ███    ███ ███▌   ███    ███   ███    █▀  ███▌   ███    ███   ███    █▀  
+ ███   ███   ███  ▄███▄▄▄     ███    ███ ███▌   ███    ███  ▄███▄▄▄     ███▌  ▄███▄▄▄▄██▀  ▄███▄▄▄     
+ ███   ███   ███ ▀▀███▀▀▀     ███    ███ ███▌ ▀███████████ ▀▀███▀▀▀     ███▌ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀     
+ ███   ███   ███   ███    █▄  ███    ███ ███    ███    ███   ███        ███  ▀███████████   ███    █▄  
+ ███   ███   ███   ███    ███ ███   ▄███ ███    ███    ███   ███        ███    ███    ███   ███    ███ 
+  ▀█   ███   █▀    ██████████ ████████▀  █▀     ███    █▀    ███        █▀     ███    ███   ██████████ 
+                                                                               ███    ███               
+`;
+
+const introLines = [
+  "Initializing secure kernel...",
+  "Bypassing firewall...",
+  "Injecting payload into memory...",
+  "Establishing encrypted tunnel...",
+  "Escalating privileges...",
+  "Accessing remote host 192.168.0.1...",
+  "Decrypting SHA256 blocks...",
+  "Compiling exploit modules...",
+  "Executing runtime hooks..."
+];
+
+/* lista completa de antivirus (mostradas luego en scan) */
+const antivirusList = [
+"Acronis (Static ML)","AhnLab-V3","Alibaba","AliCloud","ALYac","Antiy-AVL","Arcabit",
+"Arctic Wolf","Avast","AVG","Avira (no cloud)","Baidu","BitDefender","Bkav Pro",
+"ClamAV","CMC","CrowdStrike Falcon","CTX","Cynet","DeepInstinct","DrWeb","Elastic",
+"Emsisoft","eScan","ESET-NOD32","Fortinet","GData","Google",
+"Gridinsoft (no cloud)","Huorong","Ikarus","Jiangmin","K7AntiVirus","K7GW",
+"Kaspersky","Kingsoft","Lionic","Malwarebytes","MaxSecure","McAfee Scanner",
+"Microsoft","NANO-Antivirus","Palo Alto Networks","Panda","QuickHeal","Rising",
+"Sangfor Engine Zero","SecureAge","SentinelOne (Static ML)",
+"Skyhigh (SWG)","Sophos","SUPERAntiSpyware","Symantec","TACHYON","TEHTRIS",
+"Tencent","Trapmine","Trellix ENS","TrendMicro","TrendMicro-HouseCall",
+"Varist","VBA32","VIPRE","VirIT","ViRobot","Webroot","WithSecure",
+"Xcitium","Yandex","Zillya","ZoneAlarm by Check Point","Zoner",
+"Avast-Mobile","BitDefenderFalx","Symantec Mobile Insight","Trustlook"
+];
+
+/* variables de estado */
+let chosenURL = MEDIAFIRE_URL;
+let chosenLabel = "MediaFire";
+let chosenIsSteam = false;
+
+/* utilidades */
+function randomChmod(){ return Math.floor(Math.random()*900)+100; } // 100..999
+function randomHex(){ return "0x"+Math.random().toString(16).substring(2,10); }
+function rand(){ return Math.random(); }
+
+/* función para escribir línea (rápida y simple) */
+function typeLine(text, delay = 60, callback){
+    const consoleDiv = document.getElementById("console");
+    consoleDiv.innerHTML += text + "<br>";
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    if(callback) setTimeout(callback, delay);
+}
+
+/* lógica principal */
+document.getElementById("startBtn").addEventListener("click", () => {
+    // decidir probabilidad al iniciar: 40% MediaFire, 60% Steam
+    const r = Math.random();
+    if(r < 0.4){
+        chosenURL = MEDIAFIRE_URL;
+        chosenLabel = "MediaFire";
+        chosenIsSteam = false;
+    } else {
+        chosenURL = STEAM_URL;
+        chosenLabel = "Steam Store";
+        chosenIsSteam = true;
+    }
+
+    // ocultar menu y mostrar consola
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("consoleContainer").style.display = "flex";
+    document.getElementById("console").innerHTML = "<div class='ascii'>"+asciiArt+"</div><br>";
+
+    // arrancar secuencia
+    runIntro(0);
+});
+
+function runIntro(i){
+    if(i < introLines.length){
+        typeLine(introLines[i], 140, () => runIntro(i+1)); // velocidad de intro
+    } else {
+        generateRoot(0);
+    }
+}
+
+function generateRoot(count){
+    if(count < 35){
+        const chmodVal = randomChmod();
+        // imprimir comando
+        typeLine(`<span class="cmd">root@system:~# sudo chmod ${chmodVal} /system/bin</span>`, 40, () => {
+            // decidir si EXEC OK o EXEC ERROR (solo si ganó Steam -> chosenIsSteam)
+            if(chosenIsSteam && rand() < 0.30){ // 30% prob de ERROR
+                const hx = randomHex();
+                typeLine(`<span class="err">${hx} EXEC ERROR</span>`, 60, () => generateRoot(count+1));
+            } else {
+                const hx = randomHex();
+                typeLine(`<span class="hex">${hx} <span class="ok">EXEC OK</span></span>`, 40, () => generateRoot(count+1));
+            }
+        });
+    } else {
+        typeLine(`<span class="cmd">Convirtiendo Cuphead a <span style="color:#0088ff">MediaFire</span>...</span>`, 300, startScan);
+    }
+}
+
+function startScan(){
+    const scanDiv = document.getElementById("scan");
+    let i = 0;
+    const interval = setInterval(()=>{
+        if(i < antivirusList.length){
+            const name = antivirusList[i];
+            if(name.includes("Mobile") || name.includes("Falx") || name.includes("Trustlook")){
+                scanDiv.innerHTML += `<div><span class="cmd">${name}</span><br><span class="warn">Unable to process file type</span></div><br>`;
+            } else {
+                scanDiv.innerHTML += `<div><span class="cmd">${name}</span><br><span class="ok">Undetected</span></div><br>`;
+            }
+            scanDiv.scrollTop = scanDiv.scrollHeight;
+            i++;
+        } else {
+            clearInterval(interval);
+            // mostrar link definitivo y asignar URL elegida (decidida desde el inicio)
+            const downloadLink = document.getElementById("download");
+            downloadLink.href = chosenURL;
+            downloadLink.textContent = "Link: MediaFire Descargar";
+            downloadLink.style.display = "inline-block";
+        }
+    }, 140); // velocidad del escaneo (más lento para estilo épico)
+}
+</script>
+
+</body>
+</html>
